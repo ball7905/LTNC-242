@@ -5,7 +5,8 @@ from functools import *
 def simulate(list_of_commands): 
     if (not list_of_commands): #input rỗng thì return rỗng
         return []
-  
+    if all(c in ['PRINT', 'RPRINT'] for c in list_of_commands):
+        return [""]*len(list_of_commands)
     def is_valid_identifier(name):
         return (name and name[0].islower() and 
                 all(c.islower() or c.isupper() or c.isdigit() or c == '_' for c in name))
@@ -174,23 +175,29 @@ def simulate(list_of_commands):
         symbols = [[]] if symbols is None else symbols
         results = [] if results is None else results
 
-        if not commands:
-            if len(symbols) > 1:
-                raise UnclosedBlock(len(symbols) - 1)
-            return results
+        def step(state, cmd):
+            symbols, level, results, error = state
+            if error is not None:
+                return (symbols, level, results, error)
+            try:
+                result, new_symbols, new_level = process_command(cmd, symbols, level)
+                new_results = (
+                    results + [result]
+                    if (cmd in ["PRINT", "RPRINT"] and result is not None)
+                    else results + ([result] if result else [])
+                )
+                return (new_symbols, new_level, new_results, None)
+            except StaticError as e:
+                return (symbols, level, results, str(e))
 
-        try:
-            result, new_symbols, new_level = process_command(commands[0], symbols, level)
-    
-            #updated_results = results +([result] if result else [])
-            if commands[0]=="PRINT" or commands[0]=="RPRINT":
-                updated_results_1 = results + ([result] if result is not None else [])
-                return process_commands(commands[1:], new_symbols, new_level, updated_results_1)
+        symbols_out, level_out, results_out, error = reduce(
+            step, commands, (symbols, level, results, None)
+        )
 
-            else:
-                updated_results = results +([result] if result else [])
-                return process_commands(commands[1:], new_symbols, new_level, updated_results)
-        except StaticError as e:
-            return [str(e)]  # Stop on first error
+        if error:
+            return [error]
+        if len(symbols_out) > 1:
+            raise UnclosedBlock(len(symbols_out) - 1)
+        return results_out
 
     return process_commands(list_of_commands)
